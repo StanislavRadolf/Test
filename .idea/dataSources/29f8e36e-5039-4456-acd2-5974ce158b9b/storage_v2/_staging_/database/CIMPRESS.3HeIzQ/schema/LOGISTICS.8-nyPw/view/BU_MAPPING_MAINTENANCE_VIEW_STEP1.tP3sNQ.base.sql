@@ -1,0 +1,55 @@
+CREATE SECURE VIEW CIMPRESS.LOGISTICS.BU_MAPPING_MAINTENANCE_VIEW_STEP1
+    comment = 'Not yet mapped Global Fulfillment Location to business. Before inserting in BU_MAPPING needs to be defined Business_unit and Snowflake account'
+    AS
+-- Missing Logistics Location ID in BU_MAPPING
+with sm_sapi as(
+    select
+
+     sh.GLOBAL_FULFILLMENT_LOCATION_ID
+    , count(DISTINCT PACKAGES_TRACKINGID) as count_tracking_number
+
+    from CIMBA_PROD.MCP.LOGISTICS_INTEGRATION_SHIPMENT_MANAGER_TIER1 as sh
+
+    left join (select distinct GLOBAL_FULFILLMENT_LOCATION_ID from CIMPRESS.LOGISTICS.BU_MAPPING) as bufl
+        on sh.GLOBAL_FULFILLMENT_LOCATION_ID = bufl.GLOBAL_FULFILLMENT_LOCATION_ID
+
+    where 1=1
+        and sh.CIMBA_LOADEDTIMESTAMP >= current_date() - 183
+        and sh.PICKUPDATETIME >= current_date() - 183
+        and bufl.GLOBAL_FULFILLMENT_LOCATION_ID IS NULL
+        and sh.GLOBAL_FULFILLMENT_LOCATION_ID IS NOT NULL
+    GROUP BY 1
+    HAVING count_tracking_number > 0
+)
+
+select
+'' as business_unit
+, ff.FULFILLERID
+, ff.FULFILLERNAME
+, ll.LOGISTICS_LOCATION_ID
+, ll.LOGISTICS_LOCATION_NAME
+, fl.GLOBAL_FULFILLMENT_LOCATION_ID
+, fl.FULFILLMENTLOCATIONNAME as GLOBAL_FULFILLMENT_LOCATION_NAME
+, '' as SNOWFLAKE_ACCOUNT
+, current_timestamp as LOADED_TIMESTAMP
+, sum(sm_sapi.count_tracking_number) as count_tracking_number
+
+from sm_sapi
+
+left join CIMBA_PROD.MCP.DIM_FULFILLMENT_LOCATION as fl
+    on sm_sapi.GLOBAL_FULFILLMENT_LOCATION_ID = fl.GLOBAL_FULFILLMENT_LOCATION_ID
+
+left JOIN CIMBA_PROD.mcp.DIM_FULFILLER as ff
+    on fl.FULFILLERID = ff.FULFILLERID
+
+LEFT JOIN CIMBA_PROD.MCP.LOGISTICS_LOCATION as ll
+    ON fl.GLOBAL_FULFILLMENT_LOCATION_ID = ll.GLOBAL_FULFILLMENT_LOCATION_ID
+
+-- left join (select DISTINCT bu.BUSINESS_UNIT, bu.GLOBAL_FULFILLMENT_LOCATION_ID from CIMPRESS.LOGISTICS.BU_MAPPING as bu) as bufl
+--     on fl.GLOBAL_FULFILLMENT_LOCATION_ID = bufl.GLOBAL_FULFILLMENT_LOCATION_ID
+
+WHERE 1=1
+--   and fl.GLOBAL_FULFILLMENT_LOCATION_ID = 'fvxctfa2'
+
+GROUP BY 1,2,3,4,5,6,7,8,9;
+
